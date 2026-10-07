@@ -14,6 +14,7 @@ final readonly class RewrittenLock
         public string $composerLock,
         public array $projectRepository,
         public array $privateRepository = [],
+        public bool $mergedRepository = false,
     ) {}
 
     /**
@@ -27,6 +28,7 @@ final readonly class RewrittenLock
             (string) ($data['composer_lock'] ?? ''),
             is_array($repositories['project'] ?? null) ? $repositories['project'] : [],
             is_array($repositories['private'] ?? null) ? $repositories['private'] : [],
+            (bool) ($data['merged_repository'] ?? false),
         );
     }
 }

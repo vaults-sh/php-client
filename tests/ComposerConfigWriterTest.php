@@ -54,3 +54,34 @@ it('refreshes the lock content hash after adding a repository', function () {
         ->and((string) file_get_contents($this->dir.'/composer.lock'))->not->toContain('dead')
         ->and((string) file_get_contents($this->dir.'/composer.lock'))->toContain((new LockContentHash)->contentHash((string) file_get_contents($this->dir.'/composer.json')));
 });
+
+it('removes a repository by url however it was written, and refreshes the lock hash', function (array $repositories) {
+    file_put_contents($this->dir.'/composer.json', json_encode(['name' => 'acme/app', 'repositories' => $repositories]));
+    file_put_contents($this->dir.'/composer.lock', '{"content-hash": "0000000000000000000000000000dead", "packages": []}');
+
+    $writer = new ComposerConfigWriter;
+
+    expect($writer->removeRepository($this->dir, 'https://repo.vaults-edge.net/repo/projects/abc'))->toBeTrue()
+        ->and($writer->hasRepository($this->dir, 'https://repo.vaults-edge.net/repo/projects/abc'))->toBeFalse()
+        ->and($writer->hasRepository($this->dir, 'https://private.vaults-edge.net'))->toBeTrue()
+        ->and((string) file_get_contents($this->dir.'/composer.lock'))->not->toContain('dead');
+})->with([
+    'keyed by name' => [[
+        'vaults' => ['type' => 'composer', 'url' => 'https://repo.vaults-edge.net/repo/projects/abc', 'canonical' => false],
+        'vaults-private' => ['type' => 'composer', 'url' => 'https://private.vaults-edge.net', 'canonical' => false],
+    ]],
+    'a list with names' => [[
+        ['name' => 'vaults-private', 'type' => 'composer', 'url' => 'https://private.vaults-edge.net', 'canonical' => false],
+        ['name' => 'vaults', 'type' => 'composer', 'url' => 'https://repo.vaults-edge.net/repo/projects/abc', 'canonical' => false],
+    ]],
+    'a plain list' => [[
+        ['type' => 'composer', 'url' => 'https://private.vaults-edge.net', 'canonical' => false],
+        ['type' => 'composer', 'url' => 'https://repo.vaults-edge.net/repo/projects/abc', 'canonical' => false],
+    ]],
+]);
+
+it('treats removing a repository that is not there as done', function () {
+    file_put_contents($this->dir.'/composer.json', json_encode(['name' => 'acme/app']));
+
+    expect((new ComposerConfigWriter)->removeRepository($this->dir, 'https://repo.vaults-edge.net/repo/projects/abc'))->toBeTrue();
+});

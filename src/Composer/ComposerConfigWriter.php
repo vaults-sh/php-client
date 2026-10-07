@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Vaults\Composer;
 
+use stdClass;
+
 class ComposerConfigWriter
 {
     public function hasRepository(string $directory, string $url): bool
@@ -56,6 +58,68 @@ class ComposerConfigWriter
         exec($command, $output, $exitCode);
 
         return $exitCode === 0 && $this->refreshLockHash($directory);
+    }
+
+    public function removeRepository(string $directory, string $url): bool
+    {
+        $name = $this->repositoryName($directory, $url);
+
+        if ($name === null) {
+            return true;
+        }
+
+        $command = sprintf(
+            'composer config --unset %s --working-dir=%s 2>&1',
+            escapeshellarg('repositories.'.$name),
+            escapeshellarg($directory),
+        );
+
+        exec($command, $output, $exitCode);
+
+        if ($this->hasRepository($directory, $url) && ! $this->removeUnnamedRepository($directory, $url)) {
+            return false;
+        }
+
+        return $this->refreshLockHash($directory);
+    }
+
+    private function removeUnnamedRepository(string $directory, string $url): bool
+    {
+        $path = $directory.DIRECTORY_SEPARATOR.'composer.json';
+        $decoded = json_decode((string) file_get_contents($path));
+
+        if (! $decoded instanceof stdClass || ! is_array($decoded->repositories ?? null)) {
+            return false;
+        }
+
+        $decoded->repositories = array_values(array_filter(
+            $decoded->repositories,
+            fn (mixed $entry): bool => ! $entry instanceof stdClass || rtrim((string) ($entry->url ?? ''), '/') !== rtrim($url, '/'),
+        ));
+
+        $encoded = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return is_string($encoded) && file_put_contents($path, $encoded.PHP_EOL) !== false;
+    }
+
+    private function repositoryName(string $directory, string $url): ?string
+    {
+        $path = $directory.DIRECTORY_SEPARATOR.'composer.json';
+
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $decoded = json_decode((string) file_get_contents($path), true);
+        $repositories = is_array($decoded) && is_array($decoded['repositories'] ?? null) ? $decoded['repositories'] : [];
+
+        foreach ($repositories as $key => $entry) {
+            if (is_array($entry) && rtrim((string) ($entry['url'] ?? ''), '/') === rtrim($url, '/')) {
+                return is_string($entry['name'] ?? null) && $entry['name'] !== '' ? $entry['name'] : (string) $key;
+            }
+        }
+
+        return null;
     }
 
     protected function refreshLockHash(string $directory): bool

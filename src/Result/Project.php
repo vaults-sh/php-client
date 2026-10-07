@@ -18,6 +18,7 @@ final readonly class Project
         public bool $repositoryPublished,
         public float $depositPercentage,
         public ?DepositRun $latestRun,
+        public bool $mergedRepository = false,
     ) {}
 
     /**
@@ -36,6 +37,7 @@ final readonly class Project
             (bool) ($data['repository_published'] ?? false),
             (float) ($data['deposit_percentage'] ?? 0),
             is_array($latestRun) ? DepositRun::fromArray($latestRun) : null,
+            (bool) ($data['merged_repository'] ?? false),
         );
     }
 }

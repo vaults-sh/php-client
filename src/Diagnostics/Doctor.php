@@ -12,6 +12,10 @@ final readonly class Doctor
 {
     public const array EdgeHosts = ['dist.vaults-edge.net', 'repo.vaults-edge.net'];
 
+    public const string PrivateHost = 'private.vaults-edge.net';
+
+    public const string PublicHost = 'repo.vaults-edge.net';
+
     public function __construct(
         private VaultsClient $client,
         private TokenStore $store,
@@ -33,6 +37,8 @@ final readonly class Doctor
 
         $rows[] = ['composer.lock present', is_file($directory.DIRECTORY_SEPARATOR.'composer.lock') ? '✓' : '✗ (not a composer project?)'];
 
+        $rows[] = ['Vaults repositories', $this->repositoryLayout($directory)];
+
         foreach (self::EdgeHosts as $hostname) {
             $answers = $this->probe->resolve($hostname);
             $resolved = $answers !== [];
@@ -44,6 +50,32 @@ final readonly class Doctor
         }
 
         return new DoctorReport($rows, $healthy);
+    }
+
+    private function repositoryLayout(string $directory): string
+    {
+        $path = $directory.DIRECTORY_SEPARATOR.'composer.json';
+        $decoded = is_file($path) ? json_decode((string) file_get_contents($path), true) : null;
+        $repositories = is_array($decoded) && is_array($decoded['repositories'] ?? null) ? $decoded['repositories'] : [];
+        $hosts = [];
+
+        foreach ($repositories as $entry) {
+            $host = is_array($entry) ? parse_url((string) ($entry['url'] ?? ''), PHP_URL_HOST) : null;
+
+            if (is_string($host)) {
+                $hosts[] = $host;
+            }
+        }
+
+        $private = in_array(self::PrivateHost, $hosts, true);
+        $public = in_array(self::PublicHost, $hosts, true);
+
+        return match (true) {
+            $private && $public => '✓ private and public (two entries)',
+            $private => '✓ one private repository, serving public packages too',
+            $public => '✓ public only',
+            default => '- not configured (run a deposit)',
+        };
     }
 
     private function apiReachable(): bool
